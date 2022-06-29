@@ -1,45 +1,45 @@
-import sys
-from awsglue.transforms import *
-from awsglue.utils import getResolvedOptions
-from pyspark.context import SparkContext
-from awsglue.context import GlueContext
-from awsglue.job import Job
-from pyspark.sql import DataFrame, Row
-import datetime
-from awsglue import DynamicFrame
+import com.amazonaws.services.glue.GlueContext
+import com.amazonaws.services.glue.MappingSpec
+import com.amazonaws.services.glue.errors.CallSite
+import com.amazonaws.services.glue.util.GlueArgParser
+import com.amazonaws.services.glue.util.Job
+import com.amazonaws.services.glue.util.JsonOptions
+import org.apache.spark.SparkContext
+import scala.collection.JavaConverters._
+import com.amazonaws.services.glue.DynamicFrame
+import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.streaming.Trigger
+import java.util.Calendar
 
-## @params: [JOB_NAME]
-args = getResolvedOptions(sys.argv, ['JOB_NAME'])
+object GlueApp {
+  def main(sysArgs: Array[String]) {
+    val spark: SparkContext = new SparkContext()
+    val glueContext: GlueContext = new GlueContext(spark)
+    // @params: [JOB_NAME]
+    val args = GlueArgParser.getResolvedOptions(sysArgs, Seq("JOB_NAME").toArray)
+    Job.init(args("JOB_NAME"), glueContext, args.asJava)
+    // Script generated for node Kinesis Stream
+    val dataframe_KinesisStream_node1 = glueContext.getSource(connectionType="kinesis",connectionOptions={JsonOptions("""{"typeOfData": "kinesis", "streamARN": "arn:aws:kinesis:us-east-1:530992065438:stream/dojostream", "classification": "json", "startingPosition": "earliest", "inferSchema": "false"}""")}, transformationContext="dataframe_KinesisStream_node1").getDataFrame()
 
-sc = SparkContext()
-glueContext = GlueContext(sc)
-spark = glueContext.spark_session
-job = Job(glueContext)
-job.init(args['JOB_NAME'], args)
-## @type: DataSource
-## @args: [stream_type = kinesis, stream_batch_time = "100 seconds", database = "dojodatabase", additionalOptions = {"startingPosition": "TRIM_HORIZON", "inferSchema": "false"}, stream_checkpoint_location = "s3://dojo-data-stream2345/checkpoint/", table_name = "dojotable"]
-## @return: datasource0
-## @inputs: []
-data_frame_datasource0 = glueContext.create_data_frame.from_catalog(database = "dojodatabase", table_name = "dojotable", transformation_ctx = "datasource0", additional_options = {"startingPosition": "TRIM_HORIZON", "inferSchema": "false"})
-def processBatch(data_frame, batchId):
-    if (data_frame.count() > 0):
-        datasource0 = DynamicFrame.fromDF(data_frame, glueContext, "from_data_frame")
-        ## @type: ApplyMapping
-        ## @args: [mapping = [("sensor", "string", "sensor", "string"), ("temperature", "int", "temperature", "int"), ("vibration", "int", "vibration", "int")], transformation_ctx = "applymapping0"]
-        ## @return: applymapping0
-        ## @inputs: [frame = datasource0]
-        applymapping0 = ApplyMapping.apply(frame = datasource0, mappings = [("sensor", "string", "sensor", "string"), ("temperature", "int", "temperature", "int"), ("vibration", "int", "vibration", "int")], transformation_ctx = "applymapping0")
-        ## @type: DataSink
-        ## @args: [stream_batch_time = "100 seconds", stream_checkpoint_location = "s3://dojo-data-stream2345/checkpoint/", connection_type = "s3", path = "s3://dojo-data-stream2345", format = "csv", transformation_ctx = "datasink1"]
-        ## @return: datasink1
-        ## @inputs: [frame = applymapping0]
-        now = datetime.datetime.now()
-        year = now.year
-        month = now.month
-        day = now.day
-        hour = now.hour
-        minute = now.minute
-        path_datasink1 = "s3://dojo-data-stream2345" + "/ingest_year=" + "{:0>4}".format(str(year)) + "/ingest_month=" + "{:0>2}".format(str(month)) + "/ingest_day=" + "{:0>2}".format(str(day)) + "/ingest_hour=" + "{:0>2}".format(str(hour)) + "/"
-        datasink1 = glueContext.write_dynamic_frame.from_options(frame = applymapping0, connection_type = "s3", connection_options = {"path": path_datasink1}, format = "csv", transformation_ctx = "datasink1")
-glueContext.forEachBatch(frame = data_frame_datasource0, batch_function = processBatch, options = {"windowSize": "100 seconds", "checkpointLocation": "s3://dojo-data-stream2345/checkpoint/"})
-job.commit()
+    glueContext.forEachBatch(dataframe_KinesisStream_node1, (dataFrame: Dataset[Row], batchId: Long) => {
+      if (dataFrame.count() > 0) {
+        val KinesisStream_node1 = DynamicFrame(dataFrame, glueContext)
+        // Script generated for node ApplyMapping
+        val ApplyMapping_node2 = KinesisStream_node1.selectFields(paths=Seq(), transformationContext="ApplyMapping_node2")
+
+        val year: Int = Calendar.getInstance().get(Calendar.YEAR)
+        val month: Int = Calendar.getInstance().get(Calendar.MONTH) + 1
+        val day: Int = Calendar.getInstance().get(Calendar.DATE)
+        val hour: Int = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+
+        // Script generated for node S3 bucket
+        val S3bucket_node3_path = "s3://dojo-data-stream2345/output" + "/ingest_year=" + "%04d".format(year) + "/ingest_month=" + "%02d".format(month) + "/ingest_day=" + "%02d".format(day) + "/ingest_hour=" + "%02d".format(hour) + "/"
+        val S3bucket_node3 = glueContext.getSinkWithFormat(connectionType="s3", options=JsonOptions("""{"path": """" + S3bucket_node3_path + """", "partitionKeys": []}"""), transformationContext="S3bucket_node3", format="csv").writeDynamicFrame(ApplyMapping_node2)
+
+      }
+    }, JsonOptions(s"""{"windowSize" : "100 seconds", "checkpointLocation" : "${args("TempDir")}/${args("JOB_NAME")}/checkpoint/"}"""))
+    Job.commit()
+  }
+}
