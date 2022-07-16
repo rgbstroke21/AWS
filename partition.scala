@@ -34,18 +34,26 @@ object GlueApp {
     .option("startingPosition", "TRIM_HORIZON")
     .load()
     
-    val updatedData = kinesisDataStream
+
+    println("Reading done.. Printing schema...")
+    kinesisDataStream.printSchema()
+    
+    // Deserialization
+    val deserializedData = kinesisDataStream.select(
+        $"data".cast("string"),
+        $"partitionKey",
+        $"approximateArrivalTimestamp"
+    )
+    
+    val finalData = deserializedData
     .withColumn("year", year(col("approximateArrivalTimestamp")))
     .withColumn("month", month(col("approximateArrivalTimestamp")))
     .withColumn("day", dayofmonth(col("approximateArrivalTimestamp")))
     .withColumn("hour", hour(col("approximateArrivalTimestamp")))
     .drop("approximateArrivalTimestamp")
-
-    println("Reading done.. Printing schema...")
-    kinesisDataStream.printSchema()
+    
     /*
-    // Deserialization
-    var finalData : DataFrame = updatedData.select(
+    var finalData : DataFrame = kinesisDataStream.select(
         from_json(
             $"partitionKey".cast("string"),
             StructType.fromDDL(
@@ -53,13 +61,6 @@ object GlueApp {
                     |partitionKey STRING
                     |""".stripMargin)
         ) as "pk",
-        from_json(
-            $"approximateArrivalTimestamp".cast("string"),
-            StructType.fromDDL(
-                """
-                    |approximateArrivalTimestamp timestamp
-                    |""".stripMargin)
-        ) as "ts",
         from_json(
             $"data".cast("string"),
             StructType.fromDDL(
@@ -69,22 +70,10 @@ object GlueApp {
                     |col3 LONG
                     |""".stripMargin)
         ) as "data"
-    ).select( col("data.col1") , col("data.col2") , col("pk.partitionKey").alias("aws_account_id") , col("ts.approximateArrivalTimestamp"), col("data.col3") )
-    
-    println("Schema for deserialzedData......")
-    deserialzedData.printSchema()
-    
-    // Break down timestamp into year month day and hour
-    val finalData : DataFrame = deserialzedData
-    .withColumn("year", year(col("approximateArrivalTimestamp")))
-    .withColumn("month", month(col("approximateArrivalTimestamp")))
-    .withColumn("day", dayofmonth(col("approximateArrivalTimestamp")))
-    .withColumn("hour", hour(col("approximateArrivalTimestamp")))
-    .drop("approximateArrivalTimestamp")
-    
-    println("Schema for Final Data......")
-    finalData.printSchema()
+    ).select( col("data.col1") , col("data.col2") , col("pk.partitionKey").alias("aws_account_id") , col("data.col3") )
     */
+    
+    
     
     val checkPoint = "s3://dojo-data-stream2345/checkPoint"
     val outputPath = "s3://dojo-data-stream2345/output/"
@@ -92,12 +81,12 @@ object GlueApp {
     
     def processBatch( df : DataFrame , batchId : Long ): Unit = {
         println(s"Processing BatchId : $batchId")
-        // df.show(100 , truncate = false)
+        df.show(100 , truncate = false)
         df.write.partitionBy("year","month","day","hour").mode(SaveMode.Append).parquet(outputPath)
     }
 
     glueContext.forEachBatch(
-        dataFrame = updatedData,
+        dataFrame = finalData,
         writeStreamFunction = processBatch,
         options = JsonOptions(s"""{"windowSize": "5 seconds", "checkpointLocation": "$checkPoint"}""") 
     )
