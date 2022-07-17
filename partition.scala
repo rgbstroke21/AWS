@@ -34,24 +34,43 @@ object GlueApp {
     .option("startingPosition", "TRIM_HORIZON")
     .load()
     
+    // val updatedData = kinesisDataStream
+    // .withColumn("year", year(col("approximateArrivalTimestamp")))
+    // .withColumn("month", month(col("approximateArrivalTimestamp")))
+    // .withColumn("day", dayofmonth(col("approximateArrivalTimestamp")))
+    // .withColumn("hour", hour(col("approximateArrivalTimestamp")))
+    // .drop("approximateArrivalTimestamp")
 
     println("Reading done.. Printing schema...")
     kinesisDataStream.printSchema()
-    
     // Deserialization
-    val deserializedData = kinesisDataStream.select(
-        $"data".cast("string"),
-        $"partitionKey",
-        $"approximateArrivalTimestamp"
-    )
+    // val deserializedData = kinesisDataStream.select(
+    //     $"data".cast("string"),
+    //     $"partitionKey",
+    //     $"approximateArrivalTimestamp"
+    // )
     
-    val finalData = deserializedData
+    val schema = StructType.fromDDL(
+                """
+                    |col1 STRING,
+                    |col2 STRING,
+                    |col3 LONG
+                    |""".stripMargin)
+    
+    // break down data into multiple columns
+    val partitionedData = kinesisDataStream
+        .withColumn("jsonColumn", explode( array(from_json($"data".cast("string"), schema))))
+            .select($"partitionKey", $"approximateArrivalTimestamp", $"jsonColumn.*")
+    
+    val finalData = partitionedData
     .withColumn("year", year(col("approximateArrivalTimestamp")))
     .withColumn("month", month(col("approximateArrivalTimestamp")))
     .withColumn("day", dayofmonth(col("approximateArrivalTimestamp")))
     .withColumn("hour", hour(col("approximateArrivalTimestamp")))
     .drop("approximateArrivalTimestamp")
     
+    println("Final Data after update ....")
+    finalData.printSchema()
     /*
     var finalData : DataFrame = kinesisDataStream.select(
         from_json(
@@ -72,7 +91,23 @@ object GlueApp {
         ) as "data"
     ).select( col("data.col1") , col("data.col2") , col("pk.partitionKey").alias("aws_account_id") , col("data.col3") )
     */
+    /*
+    println("Schema for deserialzedData......")
+    deserialzedData.printSchema()
     
+    // Break down timestamp into year month day and hour
+    val finalData : DataFrame = deserialzedData
+    .withColumn("year", year(col("approximateArrivalTimestamp")))
+    .withColumn("month", month(col("approximateArrivalTimestamp")))
+    .withColumn("day", dayofmonth(col("approximateArrivalTimestamp")))
+    .withColumn("hour", hour(col("approximateArrivalTimestamp")))
+    .drop("approximateArrivalTimestamp")
+    
+    println("Schema for Final Data......")
+    finalData.printSchema()
+    println("Once more.....")
+    finalData.printSchema()
+    */
     
     
     val checkPoint = "s3://dojo-data-stream2345/checkPoint"
